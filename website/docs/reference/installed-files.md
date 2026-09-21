@@ -40,6 +40,8 @@ kernel updates. `modinfo -n <module>` prints the installed kernel object path.
 | `t2bdrm` | `t2bdrm` | Touch Bar DRM display device |
 | `t2touchbar` | `t2hid`, `t2touchbar_bl`, `t2touchbar_kbd` | Internal HID quirks, Touch Bar backlight and keyboard mode |
 | `hid_t2magicmouse` | `hid_t2magicmouse` | Internal trackpad support with the required Asahi patches |
+| `t2_precision_trackpad` | `t2_precision_trackpad` | Force Touch trackpad driver with dynamic surface geometry and a separate Force Click event |
+| `t2_trackpad_actuator` | `t2_trackpad_actuator` | T2 Force Touch actuator transport |
 | `t2mfi_fastcharge` | `t2mfi_fastcharge` | Fast-charge control for Apple MFi devices |
 | `t2gmux` | `t2gmux` | GMUX handling on dual-GPU Macs |
 | `t2thunderbolt` | `t2thunderbolt` | Thunderbolt power-management ordering and T2 PCI quirks |
@@ -233,6 +235,7 @@ All KAIT2EN desktop applications use the shared header wordmark at
 | T2 CPU Control | `/usr/local/bin/t2-cpu-control`, `/usr/local/libexec/t2-cpu-control-helper`, `/usr/local/libexec/t2-cpu-control-status`, `/usr/local/libexec/t2-cpu-kernel-benchmark`, `/usr/local/lib/systemd/system/t2-cpu-control.service`, `/usr/local/lib/systemd/system-sleep/t2-cpu-control`, `/usr/local/share/applications/org.t2cpucontrol.gtk.desktop`, `/usr/local/share/icons/hicolor/scalable/apps/org.t2cpucontrol.gtk.svg`, `/usr/share/polkit-1/actions/org.t2cpucontrol.policy` |
 | T2 Kernel Builder | `/usr/local/bin/t2-kernel-builder`, `/usr/local/libexec/t2-kernel-builder-cleanup`, `/usr/local/libexec/t2-kernel-builder/build.sh`, `/usr/local/libexec/t2-kernel-builder/configs/*.config`, `/usr/local/share/applications/org.t2kernelbuilder.gtk.desktop`, `/usr/local/share/icons/hicolor/scalable/apps/org.t2kernelbuilder.gtk.svg`, `/usr/local/share/polkit-1/actions/org.t2kernelbuilder.gtk.policy` |
 | T2 Power Tune | `/usr/local/bin/t2-power-tune`, `/usr/local/libexec/t2-power-tune-helper`, `/usr/local/libexec/t2-power-tune-status`, `/usr/local/share/applications/org.t2powertune.gtk.desktop`, `/usr/local/share/icons/hicolor/scalable/apps/org.t2powertune.gtk.svg`, `/usr/share/polkit-1/actions/org.t2powertune.policy` |
+| T2 Force Click | `/usr/local/bin/t2-force-click`, `/usr/local/share/applications/org.t2forceclick.gtk.desktop`, `/usr/local/share/icons/hicolor/scalable/apps/org.t2forceclick.gtk.svg`, `/usr/local/lib/systemd/system/t2-force-click.service` |
 | T2 Hybrid GPU Control | `/usr/local/bin/t2-hybrid-gpu-control`, `/usr/local/libexec/t2-hybrid-gpu-control-helper`, `/usr/local/libexec/t2-hybrid-gpu-control-status`, `/usr/local/share/applications/org.t2hybridgpucontrol.gtk.desktop`, `/usr/local/share/icons/hicolor/scalable/apps/org.t2hybridgpucontrol.gtk.svg`, `/usr/share/polkit-1/actions/org.t2hybridgpucontrol.gtk.policy`, `/usr/share/polkit-1/actions/org.t2hybridgpucontrol.gtk.status.policy` |
 | T2 GPU Control | `/usr/local/bin/t2-dgpu-control`, `/usr/local/libexec/t2-dgpu-control-helper`, `/usr/local/libexec/t2-dgpu-control-status`, `/usr/local/share/applications/org.t2dgpucontrol.gtk.desktop`, `/usr/local/share/icons/hicolor/scalable/apps/org.t2dgpucontrol.gtk.svg`, `/usr/local/lib/systemd/system/kait2en-dgpu-off.service`, `/usr/local/lib/systemd/system/kait2en-dgpu-suspend.service`, `/usr/local/lib/systemd/system/kait2en-amdgpu-profile.service`, `/usr/local/lib/systemd/system/kait2en-amdgpu-profile-resume.service`, `/usr/share/polkit-1/actions/org.t2dgpucontrol.gtk.policy`, `/usr/share/polkit-1/actions/org.t2dgpucontrol.gtk.status.policy` |
 
@@ -241,6 +244,33 @@ boot and resume. T2 Hybrid GPU Control does not install system services.
 T2 GPU Control enables its units only when the corresponding options are
 applied in the app. Both privileged helpers validate the GPU layout and accept
 only the fixed operations exposed by their UI.
+
+T2 Force Click persists its settings at `/etc/t2-force-click/config.txt`; its
+root daemon listens at `/run/t2-force-click/daemon.sock`, which is runtime
+state and disappears at shutdown. While the driver is loaded, its two
+user-facing pressure controls are:
+
+```text
+/sys/module/t2_precision_trackpad/parameters/click_strength
+/sys/module/t2_precision_trackpad/parameters/force_click_threshold_percent
+```
+
+## T2 trackpad actuator playback
+
+`t2_trackpad_actuator` exposes the DTrace-captured Taptic Engine click
+waveforms to privileged local software. A third-party helper can play the
+light or firm impulse by writing one of these values:
+
+```sh
+printf light | sudo tee /sys/module/t2_trackpad_actuator/parameters/play
+printf firm | sudo tee /sys/module/t2_trackpad_actuator/parameters/play
+```
+
+The interface accepts no raw waveform bytes. `light` and `firm` select the
+captured reports used by the precision trackpad driver. Callers should trigger
+individual application events and rate-limit repeated playback themselves.
+The parameter is write-only and requires the module to be loaded and bound to
+the T2 actuator interface.
 
 T2 Power Tune reads package C-state residency and exposes PCIe ASPM, runtime
 power management, LTR ignore, and additional power tunables. The optional
